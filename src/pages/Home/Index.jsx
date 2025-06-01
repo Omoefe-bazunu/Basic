@@ -13,9 +13,9 @@ function Home() {
         <p className="text-2xl text-gray-600 mb-6">
           Learn like a beginner, build like an expert. <br/> One step at a time.
         </p>
-        <button className="bg-red-500 text-white px-6 py-2 rounded-full hover:bg-red-600 transition">
+        <a href='#courses' className="bg-red-500 text-white px-6 py-2 rounded-full hover:bg-red-600 transition">
           START NOW
-        </button>
+        </a>
         <div
           className="mt-8 w-full h-62 max-w-md mx-auto rounded-lg bg-cover bg-center bg-no-repeat"
           style={{ backgroundImage: `url('/banner.jpeg')` }} // This seems to be the correct syntax
