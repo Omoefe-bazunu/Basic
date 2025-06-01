@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useAuth } from "../context/AuthContext";
 import { useNavigate } from "react-router-dom";
 import { db, storage } from "../services/Firebase";
-import { collection, getDocs, addDoc } from "firebase/firestore";
+import { collection, getDocs, addDoc, getDoc, doc } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 
 function CourseManagement() {
@@ -13,13 +13,15 @@ function CourseManagement() {
   const [resourceFormOpen, setResourceFormOpen] = useState(false);
   const [courseFormOpen, setCourseFormOpen] = useState(false);
   const [moduleData, setModuleData] = useState({
+    moduleTitle: "",
     lessonTitle: "",
     videoLink: "",
     courseId: "",
+    moduleId: "", // Add moduleId for existing module selection
   });
   const [resourceData, setResourceData] = useState({
     title: "",
-    file: null,
+    fileUrl: "",
     courseId: "",
   });
   const [courseData, setCourseData] = useState({
@@ -29,45 +31,81 @@ function CourseManagement() {
     price: "",
     slug: "",
   });
+  const [isNewModule, setIsNewModule] = useState(true);
+  const [existingModules, setExistingModules] = useState([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
 
-  // Redirect if not authenticated
-  if (!currentUser) {
-    navigate("/signin");
-    return null;
-  }
 
-  // Fetch courses for the select element
+  // Effect to check admin status
   useEffect(() => {
-    const fetchCourses = async () => {
-      try {
-        const querySnapshot = await getDocs(collection(db, "courses"));
-        const coursesData = querySnapshot.docs.map((doc) => ({
-          id: doc.id,
-          ...doc.data(),
-        }));
-        setCourses(coursesData);
-      } catch (error) {
-        console.error("Error fetching courses:", error);
+    const checkAdminStatus = async () => {
+      if (currentUser) {
+        try {
+          const userDoc = await getDoc(doc(db, "users", currentUser.uid));
+          if (userDoc.exists() && userDoc.data().isAdmin) {
+            setIsAdmin(true);
+          } else {
+            setIsAdmin(false);
+          }
+        } catch (error) {
+          console.error("Error checking admin status:", error);
+          setIsAdmin(false);
+        }
+      } else {
+        setIsAdmin(false);
       }
     };
-    fetchCourses();
+
+    checkAdminStatus();
+  }, [currentUser, navigate]);
+
+  // Fetch courses for the select element
+  const fetchCourses = useCallback(async () => {
+    try {
+      const querySnapshot = await getDocs(collection(db, "courses"));
+      const coursesData = querySnapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      }));
+      setCourses(coursesData);
+    } catch (error) {
+      console.error("Error fetching courses:", error);
+    }
   }, []);
 
-  const handleModuleChange = (e) => {
+  useEffect(() => {
+    fetchCourses();
+  }, [fetchCourses]);
+
+  // Fetch existing modules
+  const fetchExistingModules = useCallback(async () => {
+    try {
+      const querySnapshot = await getDocs(collection(db, "modules"));
+      const modulesData = querySnapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      }));
+      setExistingModules(modulesData);
+    } catch (error) {
+      console.error("Error fetching modules:", error);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchExistingModules();
+  }, [fetchExistingModules]);
+
+  const handleModuleChange = useCallback((e) => {
     const { name, value } = e.target;
     setModuleData((prev) => ({ ...prev, [name]: value }));
-  };
+  }, []);
 
-  const handleResourceChange = (e) => {
-    const { name, value, files } = e.target;
-    if (name === "file") {
-      setResourceData((prev) => ({ ...prev, [name]: files[0] }));
-    } else {
-      setResourceData((prev) => ({ ...prev, [name]: value }));
-    }
-  };
+  const handleResourceChange = useCallback((e) => {
+    const { name, value } = e.target;
+    setResourceData((prev) => ({ ...prev, [name]: value }));
+  }, []);
 
   const handleCourseChange = (e) => {
     const { name, value, files } = e.target;
@@ -75,6 +113,7 @@ function CourseManagement() {
       setCourseData((prev) => ({ ...prev, [name]: files[0] }));
     } else {
       setCourseData((prev) => ({ ...prev, [name]: value }));
+
     }
   };
 
@@ -83,15 +122,49 @@ function CourseManagement() {
     setError("");
     setLoading(true);
 
+    // Admin check
+    if (!isAdmin) {
+      setError("You do not have permission to add modules.");
+      setLoading(false);
+      return;
+    }
+
     try {
-      await addDoc(collection(db, "modules"), {
+      let moduleRef;
+
+      if (isNewModule) {
+        // Create a new module document
+        const newModuleDocRef = await addDoc(collection(db, "modules"), {
+          title: moduleData.moduleTitle,
+          courseId: moduleData.courseId,
+          createdAt: new Date(),
+        });
+        moduleRef = newModuleDocRef.id;
+      } else {
+        if (!moduleData.moduleId) {
+          throw new Error("Please select an existing module.");
+        }
+        moduleRef = moduleData.moduleId;
+      }
+
+      // Add the lesson linked to the module
+      await addDoc(collection(db, "lessons"), {
         lessonTitle: moduleData.lessonTitle,
         videoLink: moduleData.videoLink,
         courseId: moduleData.courseId,
+        moduleId: moduleRef,
         createdAt: new Date(),
       });
+
       setModuleFormOpen(false);
-      setModuleData({ lessonTitle: "", videoLink: "", courseId: "" });
+      setModuleData({
+        moduleTitle: "",
+        lessonTitle: "",
+        videoLink: "",
+        courseId: "",
+        moduleId: "",
+      });
+      fetchExistingModules(); // Refresh existing modules
     } catch (err) {
       setError("Failed to add module: " + err.message);
     } finally {
@@ -104,22 +177,21 @@ function CourseManagement() {
     setError("");
     setLoading(true);
 
-    try {
-      let fileUrl = "";
-      if (resourceData.file) {
-        const storageRef = ref(storage, `resources/${resourceData.file.name}`);
-        await uploadBytes(storageRef, resourceData.file);
-        fileUrl = await getDownloadURL(storageRef);
-      }
+    if (!isAdmin) {
+      setError("You do not have permission to add resources.");
+      setLoading(false);
+      return;
+    }
 
+    try {
       await addDoc(collection(db, "resources"), {
         title: resourceData.title,
-        fileUrl: fileUrl,
+        fileUrl: resourceData.fileUrl, // direct link to Google Drive
         courseId: resourceData.courseId,
         createdAt: new Date(),
       });
       setResourceFormOpen(false);
-      setResourceData({ title: "", file: null, courseId: "" });
+      setResourceData({ title: "", fileUrl: "", courseId: "" });
     } catch (err) {
       setError("Failed to add resource: " + err.message);
     } finally {
@@ -131,6 +203,12 @@ function CourseManagement() {
     e.preventDefault();
     setError("");
     setLoading(true);
+
+    if (!isAdmin) {
+      setError("You do not have permission to add courses.");
+      setLoading(false);
+      return;
+    }
 
     try {
       let imageUrl = "";
@@ -149,6 +227,7 @@ function CourseManagement() {
         description: courseData.description,
         price: courseData.price,
         slug: courseData.slug,
+        previewLink: courseData.previewLink,
         createdAt: new Date(),
       });
       setCourseFormOpen(false);
@@ -158,14 +237,27 @@ function CourseManagement() {
         description: "",
         price: "",
         slug: "",
+        previewLink: "",
       });
-      navigate("/"); // Redirect to Home after adding the course
+      navigate("/");
     } catch (err) {
       setError("Failed to add course: " + err.message);
     } finally {
       setLoading(false);
     }
   };
+
+  // If not authenticated and not an admin, show a message or redirect
+  if (!currentUser || !isAdmin) {
+    return (
+      <div className="min-h-screen bg-gray-100 p-4 flex justify-center items-center">
+        <div className="bg-white p-6 rounded-lg shadow-md text-center">
+          <h1 className="text-2xl font-bold text-red-500 mb-4">Access Denied</h1>
+          <p className="text-gray-700">You do not have permission to view this page.</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-100 p-4 flex justify-center items-center">
@@ -185,6 +277,81 @@ function CourseManagement() {
           {moduleFormOpen && (
             <form onSubmit={handleModuleSubmit} className="mt-4 space-y-4">
               {error && <p className="text-red-500 text-center">{error}</p>}
+
+              {/* Course Selection for Module */}
+              <select
+                name="courseId"
+                className="w-full p-2 border rounded text-gray-800"
+                value={moduleData.courseId}
+                onChange={handleModuleChange}
+                required
+              >
+                <option value="">Select a Course for Module</option>
+                {courses.map((course) => (
+                  <option key={course.id} value={course.id}>
+                    {course.title}
+                  </option>
+                ))}
+              </select>
+
+              {/* Module Type Selection */}
+              <div className="flex items-center space-x-4">
+                <label className="flex items-center">
+                  <input
+                    type="radio"
+                    name="moduleType"
+                    value="new"
+                    checked={isNewModule}
+                    onChange={() => setIsNewModule(true)}
+                    className="form-radio"
+                  />
+                  <span className="ml-2 text-gray-700">Create New Module</span>
+                </label>
+                <label className="flex items-center">
+                  <input
+                    type="radio"
+                    name="moduleType"
+                    value="existing"
+                    checked={!isNewModule}
+                    onChange={() => setIsNewModule(false)}
+                    className="form-radio"
+                  />
+                  <span className="ml-2 text-gray-700">Add to Existing Module</span>
+                </label>
+              </div>
+
+              {/* New Module Title Input */}
+              {isNewModule && (
+                <input
+                  type="text"
+                  name="moduleTitle"
+                  placeholder="New Module Title"
+                  className="w-full p-2 border rounded text-gray-800"
+                  value={moduleData.moduleTitle}
+                  onChange={handleModuleChange}
+                  required
+                />
+              )}
+
+              {/* Existing Module Select */}
+              {!isNewModule && (
+                <select
+                  name="moduleId"
+                  className="w-full p-2 border rounded text-gray-800"
+                  value={moduleData.moduleId || ""}
+                  onChange={handleModuleChange}
+                  required
+                >
+                  <option value="">Select an Existing Module</option>
+                  {existingModules.map((module) => (
+                    <option key={module.id} value={module.id}>
+                      {module.title} ({courses.find(c => c.id === module.courseId)?.title || "Unknown Course"})
+                    </option>
+                  ))}
+                </select>
+              )}
+
+              {/* Lesson Title Input */}
               <input
                 type="text"
                 name="lessonTitle"
@@ -194,6 +361,8 @@ function CourseManagement() {
                 onChange={handleModuleChange}
                 required
               />
+
+              {/* Lesson Video Link Input */}
               <input
                 type="url"
                 name="videoLink"
@@ -203,20 +372,7 @@ function CourseManagement() {
                 onChange={handleModuleChange}
                 required
               />
-              <select
-                name="courseId"
-                className="w-full p-2 border rounded text-gray-800"
-                value={moduleData.courseId}
-                onChange={handleModuleChange}
-                required
-              >
-                <option value="">Select a Course</option>
-                {courses.map((course) => (
-                  <option key={course.id} value={course.id}>
-                    {course.title}
-                  </option>
-                ))}
-              </select>
+
               <button
                 type="submit"
                 disabled={loading}
@@ -249,13 +405,14 @@ function CourseManagement() {
                 required
               />
               <input
-                type="file"
-                name="file"
-                accept="image/*,application/pdf"
-                className="w-full p-2 border rounded text-gray-800"
-                onChange={handleResourceChange}
-                required
-              />
+  type="text"
+  name="fileUrl"
+  value={resourceData.fileUrl}
+  onChange={handleResourceChange}
+  placeholder="Paste Google Drive link here"
+  className="w-full p-2 border rounded text-gray-800"
+  required
+/>
               <select
                 name="courseId"
                 className="w-full p-2 border rounded text-gray-800"
@@ -282,69 +439,79 @@ function CourseManagement() {
         </div>
 
         {/* Course Form */}
-        <div className="mb-6">
-          <button
-            onClick={() => setCourseFormOpen(!courseFormOpen)}
-            className="w-full bg-blue-500 text-white p-2 rounded-lg cursor-pointer hover:bg-blue-600 transition"
-          >
-            {courseFormOpen ? "Close Course Form" : "Create New Course"}
-          </button>
-          {courseFormOpen && (
-            <form onSubmit={handleCourseSubmit} className="mt-4 space-y-4">
-              {error && <p className="text-red-500 text-center">{error}</p>}
-              <input
-                type="file"
-                name="image"
-                accept="image/*"
-                className="w-full p-2 border rounded text-gray-800"
-                onChange={handleCourseChange}
-                required
-              />
-              <input
-                type="text"
-                name="title"
-                placeholder="Course Title"
-                className="w-full p-2 border rounded text-gray-800"
-                value={courseData.title}
-                onChange={handleCourseChange}
-                required
-              />
-              <textarea
-                name="description"
-                placeholder="Course Description"
-                className="w-full p-2 border rounded text-gray-800"
-                value={courseData.description}
-                onChange={handleCourseChange}
-                required
-              />
-              <input
-                type="number"
-                name="price"
-                placeholder="Price (e.g., 5)"
-                className="w-full p-2 border rounded text-gray-800"
-                value={courseData.price}
-                onChange={handleCourseChange}
-                required
-              />
-              <input
-                type="text"
-                name="slug"
-                placeholder="Slug (e.g., web-development)"
-                className="w-full p-2 border rounded text-gray-800"
-                value={courseData.slug}
-                onChange={handleCourseChange}
-                required
-              />
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full bg-blue-500 text-white p-2 rounded-full hover:bg-blue-600 transition disabled:bg-blue-300"
-              >
-                {loading ? "Adding Course..." : "Add Course"}
-              </button>
-            </form>
-          )}
-        </div>
+        {isAdmin && (
+          <div className="mb-6">
+            <button
+              onClick={() => setCourseFormOpen(!courseFormOpen)}
+              className="w-full bg-blue-500 text-white p-2 rounded-lg cursor-pointer hover:bg-blue-600 transition"
+            >
+              {courseFormOpen ? "Close Course Form" : "Create New Course"}
+            </button>
+            {courseFormOpen && (
+              <form onSubmit={handleCourseSubmit} className="mt-4 space-y-4">
+                {error && <p className="text-red-500 text-center">{error}</p>}
+                <input
+                  type="file"
+                  name="image"
+                  accept="image/*"
+                  className="w-full p-2 border rounded text-gray-800"
+                  onChange={handleCourseChange}
+                  required
+                />
+                <input
+                  type="text"
+                  name="title"
+                  placeholder="Course Title"
+                  className="w-full p-2 border rounded text-gray-800"
+                  value={courseData.title}
+                  onChange={handleCourseChange}
+                  required
+                />
+                <textarea
+                  name="description"
+                  placeholder="Course Description"
+                  className="w-full p-2 border rounded text-gray-800"
+                  value={courseData.description}
+                  onChange={handleCourseChange}
+                  required
+                />
+                <input
+                  type="number"
+                  name="price"
+                  placeholder="Price (e.g., 5)"
+                  className="w-full p-2 border rounded text-gray-800"
+                  value={courseData.price}
+                  onChange={handleCourseChange}
+                  required
+                />
+                <input
+                  type="text"
+                  name="slug"
+                  placeholder="Slug (e.g., web-development)"
+                  className="w-full p-2 border rounded text-gray-800"
+                  value={courseData.slug}
+                  onChange={handleCourseChange}
+                  required
+                />
+                <input
+                  type="url"
+                  name="previewLink"
+                  placeholder="Preview Video Link (Optional)"
+                  className="w-full p-2 border rounded text-gray-800"
+                  value={courseData.previewLink}
+                  onChange={handleCourseChange}
+                />
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full bg-blue-500 text-white p-2 rounded-full hover:bg-blue-600 transition disabled:bg-blue-300"
+                >
+                  {loading ? "Adding Course..." : "Add Course"}
+                </button>
+              </form>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

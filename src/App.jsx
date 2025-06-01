@@ -10,6 +10,7 @@ import SignUp from "./pages/Authentication/Signup";
 import SignIn from "./pages/Authentication/Login";
 import Contact from "./pages/Contact/Index";
 import CourseManagement from "./components/CourseManagement";
+import SubscriptionRequests from "./pages/SubscriptionRequests";
 import "react-toastify/dist/ReactToastify.css";
 import "slick-carousel/slick/slick.css";
 import "slick-carousel/slick/slick-theme.css";
@@ -31,7 +32,7 @@ function App() {
                 </ProtectedRoute>
               }
             />
-            <Route path="/course-details" element={<CourseDetails />} />
+           <Route path="/course/:slug" element={<CourseDetails />} />
             <Route path="/signup" element={<SignUp />} />
             <Route path="/signin" element={<SignIn />} />
             <Route path="/contact" element={<Contact />} />
@@ -40,6 +41,14 @@ function App() {
               element={
                 <ProtectedRoute>
                   <CourseManagement />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/subscription-requests"
+              element={
+                <ProtectedRoute>
+                  <SubscriptionRequests />
                 </ProtectedRoute>
               }
             />

@@ -8,6 +8,7 @@ function Contact() {
           <p>Email: info@higher.com.ng</p>
           <p>Phone: (234) 9043970401 </p>
         </div>
+        <a href="https://wa.me/2349043970401?text=Hello%2C%20I'm%20interested%20in%20your%20courses!"><div className=" rounded-full text-white p-4 bg-green-500">Chat on WhatsApp</div></a>
       </div>
     </div>
   );
