@@ -9,6 +9,7 @@ function CourseManagement() {
   const { currentUser } = useAuth();
   const navigate = useNavigate();
   const [courses, setCourses] = useState([]);
+  const [users, setUsers] = useState([]);
   const [moduleFormOpen, setModuleFormOpen] = useState(false);
   const [resourceFormOpen, setResourceFormOpen] = useState(false);
   const [courseFormOpen, setCourseFormOpen] = useState(false);
@@ -36,6 +37,7 @@ function CourseManagement() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [usersListOpen, setUsersListOpen] = useState(false);
 
 
   // Effect to check admin status
@@ -61,6 +63,21 @@ function CourseManagement() {
     checkAdminStatus();
   }, [currentUser, navigate]);
 
+  //fetch all users
+  const fetchUsers = useCallback(async () => {
+    try {
+      const userSnapshot = await getDocs(collection(db, "users"));
+      const usersData = userSnapshot.docs.map((doc) => ({
+        id: doc.id, 
+        ...doc.data(),
+      }));
+      setUsers(usersData)
+    } catch (error) {
+      console.error("Error fetching users data", error);
+    }
+
+  }, []);
+
   // Fetch courses for the select element
   const fetchCourses = useCallback(async () => {
     try {
@@ -76,6 +93,7 @@ function CourseManagement() {
   }, []);
 
   useEffect(() => {
+    fetchUsers();
     fetchCourses();
   }, [fetchCourses]);
 
@@ -512,6 +530,30 @@ function CourseManagement() {
             )}
           </div>
         )}
+
+        {/* Users List (Collapsible) */}
+        <div className="mb-6">
+          <button
+            onClick={() => setUsersListOpen(!usersListOpen)}
+            className="w-full bg-purple-500 text-white p-2 rounded-lg cursor-pointer hover:bg-purple-600 transition"
+          >
+            {usersListOpen ? "Hide Users" : "View All Users"}
+          </button>
+          {usersListOpen && (
+            <div className="mt-4 space-y-2 max-h-60 overflow-y-auto border rounded p-2 bg-gray-50">
+              {users.length > 0 ? (
+                users.map((user) => (
+                  <p key={user.id} className="text-sm text-gray-800 truncate">
+                    <strong>{user.name || "N/A"}</strong>: {user.email}
+                  </p>
+                ))
+              ) : (
+                <p className="text-gray-600 text-center">No users found.</p>
+              )}
+            </div>
+          )}
+        </div>
+        
       </div>
     </div>
   );

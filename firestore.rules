@@ -10,7 +10,7 @@ service cloud.firestore {
 
     // Users collection: user-specific data like enrolledCourses and communities
     match /users/{userId} {
-      allow read: if request.auth != null && request.auth.uid == userId;
+      allow read: if request.auth != null && (request.auth.uid == userId || isAdmin());
       allow write: if request.auth != null && request.auth.uid == userId &&
                      (
                        (request.resource.data.keys().hasAll(['email', 'enrolledCourses', 'communities', 'createdAt']) &&
@@ -24,6 +24,7 @@ service cloud.firestore {
                         request.resource.data.communities is list)
                      );
       allow update: if request.auth != null && request.auth.uid == userId;
+      allow write: if request.auth != null && isAdmin();
     }
 
     // Courses collection: course details
