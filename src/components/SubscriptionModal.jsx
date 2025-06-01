@@ -83,12 +83,12 @@ const SubscriptionModal = ({ course, onClose }) => {
           &times;
         </button>
 
-        <h2 className="text-2xl font-bold mb-4 text-center text-blue-600">Subscription Required</h2>
+        <h2 className="text-2xl font-bold mb-4 text-center text-blue-600 ">Subscription Required</h2>
         <p className="text-gray-800 text-center mb-4">
-          Pay <span className="font-semibold text-green-600">${course.price}</span> monthly fee to access this course.
+          Pay <span className="font-semibold text-green-600">${course.price}</span> one-time fee to access this course.
         </p>
 
-        <div className="text-sm mb-4">
+        <div className="text-sm mb-4 text-gray-500">
           <h3 className="font-semibold text-gray-700">Nigerian Account Details</h3>
           <p>Bank: Sterling Bank PLC</p>
           <p>Account Name: Omoefe Bazunu</p>
@@ -103,14 +103,14 @@ const SubscriptionModal = ({ course, onClose }) => {
           <p>Address: 1801 Main St., Kansas City, MO 64108</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="mt-4 space-y-3">
+        <form onSubmit={handleSubmit} className="mt-4 space-y-3 text-gray-500">
           <label className="block">
             <span className="text-gray-700 text-sm">Upload Payment Receipt (Image or PDF)</span>
             <input
               type="file"
               accept="image/*,.pdf"
               onChange={handleFileChange}
-              className="mt-1 block w-full text-sm border border-gray-300 rounded-md p-1"
+              className="mt-1 block w-full text-sm border border-gray-300 rounded-md p-1 text-gray-500"
               required
             />
           </label>

@@ -5,7 +5,7 @@ import { collection, getDocs, doc, getDoc } from "firebase/firestore";
 import { useAuth } from "../../context/AuthContext";
 import EditCourseModal from "../../components/EditCourseModal";
 import PreviewModal from "../../components/PreviewModal";
-import SubscriptionModal from "../../components/SubscriptionModal";
+import SubscriptionModal from "../../components/SubscriptionModal"; // assuming you have this component
 
 const CourseList = () => {
   const [isSubscriptionModalOpen, setIsSubscriptionModalOpen] = useState(false);
@@ -16,6 +16,7 @@ const CourseList = () => {
   const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
   const [previewingCourse, setPreviewingCourse] = useState(null);
   const { currentUser } = useAuth();
+  const [isAdmin, setIsAdmin] = useState(false); // State to track admin status
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingCourse, setEditingCourse] = useState(null);
   const navigate = useNavigate();
@@ -40,6 +41,10 @@ const CourseList = () => {
             const userData = userDoc.data();
             const enrolled = userData.enrolledCourses || [];
             setEnrolledCourses(enrolled.map((course) => course.id)); // Extract id from objects
+            // Check if the user is an admin
+            if (userData.isAdmin) {
+              setIsAdmin(true);
+            }
           }
         }
         setError("");
@@ -123,7 +128,7 @@ const CourseList = () => {
                     >
                       PREVIEW
                     </button>
-                    {currentUser && (
+                    {currentUser && isAdmin && (
                       <button
                         className="mt-4 bg-blue-500 text-white px-4 py-2 rounded-full hover:bg-blue-600 transition"
                         onClick={() => handleEditClick(course)}

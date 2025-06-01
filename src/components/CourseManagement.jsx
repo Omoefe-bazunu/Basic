@@ -544,7 +544,7 @@ function CourseManagement() {
               {users.length > 0 ? (
                 users.map((user) => (
                   <p key={user.id} className="text-sm text-gray-800 truncate">
-                    <strong>{user.name || "N/A"}</strong>: {user.email}
+                    <strong>{user.fullName || "N/A"}</strong>: {user.email}
                   </p>
                 ))
               ) : (
